@@ -1,6 +1,11 @@
 const bcrypt = require("bcryptjs");
+const mailgun = require("mailgun-js");
+const DOMAIN = 'sandbox6d75e43fe86a4d20a436055dc14bb006.mailgun.org';
+const api_key = 'c2453b8f69e497f74e40793f0b80907e-468bde97-12fd0aa6';
+const mg = mailgun({apiKey: api_key, domain: DOMAIN});
 
 const User = require("../models/user");
+const { getMaxListeners } = require("../models/user");
 
 exports.getLogin = (req, res, next) => {
   let message = req.flash('error');
@@ -74,6 +79,12 @@ exports.postSignup = (req, res, next) => {
         return user.save();
       })
       .then((result) => {
+        mg.messages().send({
+          from: '<shopstore@gmail.com>',
+          to: email,
+          subject: 'Signup succeeded',
+          html: '<h1>You are successfully signed up!</h1>'
+        });
         res.redirect("/login");
       });
     })
@@ -88,3 +99,17 @@ exports.postLogout = (req, res, next) => {
     res.redirect("/");
   });
 };
+
+exports.getReset = (req, res, next) => {
+  let message = req.flash('error');
+  if(message.length > 0) {
+    message = message[0];
+  } else {
+    message = null;
+  }
+  res.render('auth/reset', {
+    path: '/reset',
+    pageTitle: 'Reset Password',
+    errorMessage: message
+  })
+}
