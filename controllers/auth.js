@@ -1,15 +1,17 @@
+const crypto = require("crypto");
+
 const bcrypt = require("bcryptjs");
 const mailgun = require("mailgun-js");
-const DOMAIN = 'sandbox6d75e43fe86a4d20a436055dc14bb006.mailgun.org';
-const api_key = 'c2453b8f69e497f74e40793f0b80907e-468bde97-12fd0aa6';
-const mg = mailgun({apiKey: api_key, domain: DOMAIN});
+const DOMAIN = "sandboxf8e9312e5b73426d9b3261a995a6a2ce.mailgun.org";
+const api_key = "85a5f11431051b48eea02d281d5edcf3-468bde97-fa116e88";
+const mg = mailgun({ apiKey: api_key, domain: DOMAIN });
 
 const User = require("../models/user");
 const { getMaxListeners } = require("../models/user");
 
 exports.getLogin = (req, res, next) => {
-  let message = req.flash('error');
-  if(message.length > 0) {
+  let message = req.flash("error");
+  if (message.length > 0) {
     message = message[0];
   } else {
     message = null;
@@ -17,7 +19,7 @@ exports.getLogin = (req, res, next) => {
   res.render("auth/login", {
     path: "/login",
     pageTitle: "Login",
-    errorMessage: message
+    errorMessage: message,
   });
 };
 
@@ -33,31 +35,31 @@ exports.postLogin = (req, res, next) => {
   const email = req.body.email;
   const password = req.body.password;
   User.findOne({ email: email })
-    .then(user => {
+    .then((user) => {
       if (!user) {
-        req.flash('error', 'Invalid email or password.');
-        return res.redirect('/login');
+        req.flash("error", "Invalid email or password.");
+        return res.redirect("/login");
       }
       bcrypt
         .compare(password, user.password)
-        .then(doMatch => {
+        .then((doMatch) => {
           if (doMatch) {
             req.session.isLoggedIn = true;
             req.session.user = user;
-            return req.session.save(err => {
+            return req.session.save((err) => {
               console.log(err);
-              res.redirect('/');
+              res.redirect("/");
             });
           }
-          req.flash('error', 'Invalid email or password.');
-          res.redirect('/login');
+          req.flash("error", "Invalid email or password.");
+          res.redirect("/login");
         })
-        .catch(err => {
+        .catch((err) => {
           console.log(err);
-          res.redirect('/login');
+          res.redirect("/login");
         });
     })
-    .catch(err => console.log(err));
+    .catch((err) => console.log(err));
 };
 
 exports.postSignup = (req, res, next) => {
@@ -69,24 +71,25 @@ exports.postSignup = (req, res, next) => {
       if (userDoc) {
         return res.redirect("/signup");
       }
-      return bcrypt.hash(password, 12)
-      .then(hashedPassword => {
-        const user = new User({
-          email: email,
-          password: hashedPassword,
-          cart: { items: [] },
+      return bcrypt
+        .hash(password, 12)
+        .then((hashedPassword) => {
+          const user = new User({
+            email: email,
+            password: hashedPassword,
+            cart: { items: [] },
+          });
+          return user.save();
+        })
+        .then((result) => {
+          mg.messages().send({
+            from: "<shopstore@gmail.com>",
+            to: email,
+            subject: "Signup succeeded",
+            html: "<h1>You are successfully signed up!</h1>",
+          });
+          res.redirect("/login");
         });
-        return user.save();
-      })
-      .then((result) => {
-        mg.messages().send({
-          from: '<shopstore@gmail.com>',
-          to: email,
-          subject: 'Signup succeeded',
-          html: '<h1>You are successfully signed up!</h1>'
-        });
-        res.redirect("/login");
-      });
     })
     .catch((err) => {
       console.log(err);
@@ -101,15 +104,48 @@ exports.postLogout = (req, res, next) => {
 };
 
 exports.getReset = (req, res, next) => {
-  let message = req.flash('error');
-  if(message.length > 0) {
+  let message = req.flash("error");
+  if (message.length > 0) {
     message = message[0];
   } else {
     message = null;
   }
-  res.render('auth/reset', {
-    path: '/reset',
-    pageTitle: 'Reset Password',
-    errorMessage: message
-  })
-}
+  res.render("auth/reset", {
+    path: "/reset",
+    pageTitle: "Reset Password",
+    errorMessage: message,
+  });
+};
+
+exports.postReset = (req, res, next) => {
+  crypto.randomBytes(32, (err, buffer) => {
+    if (err) {
+      console.log(err);
+      return res.redirect("/reset");
+    }
+    const token = buffer.toString("hex");
+    User.findOne({ email: req.body.email })
+      .then((user) => {
+        if (!user) {
+          req.flash("error", "No account with that email found");
+          return res.redirect("/reset");
+        }
+        user.resetToken = token;
+        user.resetTokenExpiration = Date.now() + 3600000;
+        return user.save();
+      })
+      .then((result) => {
+        mg.messages().send({
+          from: "<shopstore@gmail.com>",
+          to: req.body.email,
+          subject: "Password Reset",
+          html: `
+        <p>You requested a password reset.</p>
+        <p>Click this <a href='http://localhost:3000/reset/${token}'>link</a> to set a new password.</p>
+        `,
+        });
+        res.redirect('/');
+      })
+      .catch((err) => console.log(err));
+  });
+};
